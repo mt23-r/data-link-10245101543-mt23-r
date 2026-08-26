@@ -1,0 +1,3 @@
+﻿record_no,target_id,stage,field,problem_type,value,description
+4,780bad,parse,timestamp,REQUIRED_FIELD_MISSING,"time_position=None, last_contact=None",time_position 与 last_contact 至少需要一个可用整数时间戳。
+5,780bee,parse,heading,OUT_OF_RANGE,360.0,heading 超出允许范围：0.0 <= value < 360.0。
