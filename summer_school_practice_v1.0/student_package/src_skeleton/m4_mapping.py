@@ -97,13 +97,38 @@ VERIFIED_RULES = [
 ]
 
 
+def get_verified_rules() -> list[dict[str, str]]:
+    """返回代码中固化的34条正式规则，并检查规则表结构。"""
+    rules = deepcopy(VERIFIED_RULES)
+    if len(rules) != 34:
+        raise RuntimeError(f"正式映射规则数量应为34条，当前为{len(rules)}条。")
+
+    keys: set[tuple[str, str]] = set()
+    source_counts: dict[str, int] = {}
+    for row_no, rule in enumerate(rules, start=1):
+        missing = [field for field in VERIFIED_MAPPING_FIELDS if field not in rule]
+        if missing:
+            raise RuntimeError(f"正式映射规则第{row_no}条缺少字段：{','.join(missing)}")
+        if str(rule["verified"]).strip().lower() != "true":
+            raise RuntimeError(f"正式映射规则第{row_no}条未标记为verified=true。")
+        key = (rule["source_format"], rule["unified_field"])
+        if key in keys:
+            raise RuntimeError(f"正式映射规则存在重复键：{key[0]}/{key[1]}")
+        keys.add(key)
+        source_counts[key[0]] = source_counts.get(key[0], 0) + 1
+
+    if source_counts != {"OpenSky": 17, "TeachingLink": 17}:
+        raise RuntimeError(f"正式映射规则应为OpenSky和TeachingLink各17条，当前为{source_counts}。")
+    return rules
+
+
 def verify_candidate_mapping(candidate_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """依据字段定义、单位、有效性和样例，形成人工核验后的正式映射。"""
     for row_no, row in enumerate(candidate_rows, start=2):
         missing_columns = [field for field in CANDIDATE_FIELDS if field not in row]
         if missing_columns:
             raise ValueError(f"候选映射第{row_no}行缺少字段：{','.join(missing_columns)}")
-    return deepcopy(VERIFIED_RULES)
+    return get_verified_rules()
 
 
 def is_missing(value: Any) -> bool:
@@ -516,17 +541,11 @@ def compare_unified_sources(records: list[dict[str, Any]]) -> list[dict[str, Any
     return comparisons
 
 
-def map_with_verified_rules(
+def _write_unified_situation(
     opensky_path: Path = OUTPUT_ROOT / "current_situation.csv",
     teachinglink_path: Path = DATA_ROOT / "m4" / "partner_current_situation.csv",
     output_root: Path = OUTPUT_ROOT,
-    verified_mapping_path: Path = OUTPUT_ROOT / "verified_mapping_table.csv",
 ) -> list[dict[str, Any]]:
-    """只使用M4已核验并固化的正式规则生成统一消息。"""
-    verified_rows = read_csv(verified_mapping_path)
-    if not verified_rows or any(str(row.get("verified", "")).strip().lower() != "true" for row in verified_rows):
-        raise ValueError("M6映射需要M4已经生成且全部标记为verified=true的正式映射表。")
-
     opensky_rows = read_csv(opensky_path)
     teachinglink_rows = read_csv(teachinglink_path)
 
@@ -540,6 +559,21 @@ def map_with_verified_rules(
     return unified_records
 
 
+def map_with_verified_rules(
+    opensky_path: Path = OUTPUT_ROOT / "current_situation.csv",
+    teachinglink_path: Path = DATA_ROOT / "m4" / "partner_current_situation.csv",
+    candidate_path: Path = REFERENCE_ROOT / "pre_generated_mapping_candidate.csv",
+    output_root: Path = OUTPUT_ROOT,
+) -> list[dict[str, Any]]:
+    """导出M4既有核验成果，并使用代码中固化的正式规则生成统一消息。"""
+    candidate_rows = read_csv(candidate_path)
+    verified_rows = get_verified_rules()
+    write_csv(output_root / "llm_mapping_candidate.csv", CANDIDATE_FIELDS, candidate_rows)
+    write_csv(output_root / "verified_mapping_table.csv", VERIFIED_MAPPING_FIELDS, verified_rows)
+    unified_records = _write_unified_situation(opensky_path, teachinglink_path, output_root)
+    return unified_records
+
+
 def run_m4(
     opensky_path: Path = OUTPUT_ROOT / "current_situation.csv",
     teachinglink_path: Path = DATA_ROOT / "m4" / "partner_current_situation.csv",
@@ -550,12 +584,7 @@ def run_m4(
     verified_rows = verify_candidate_mapping(candidate_rows)
     write_csv(output_root / "llm_mapping_candidate.csv", CANDIDATE_FIELDS, candidate_rows)
     write_csv(output_root / "verified_mapping_table.csv", VERIFIED_MAPPING_FIELDS, verified_rows)
-    unified_records = map_with_verified_rules(
-        opensky_path,
-        teachinglink_path,
-        output_root,
-        output_root / "verified_mapping_table.csv",
-    )
+    unified_records = _write_unified_situation(opensky_path, teachinglink_path, output_root)
     comparisons = compare_unified_sources(unified_records)
 
     return candidate_rows, verified_rows, unified_records

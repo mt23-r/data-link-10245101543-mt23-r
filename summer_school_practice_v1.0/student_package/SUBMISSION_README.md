@@ -2,12 +2,12 @@
 
 ## 基本信息
 
-- 姓名：待填写
+- 姓名：唐丽蓉
 - 学号：10245101543
 - GitHub用户名：mt23-r
 - Python版本：3.13.7
-- 是否使用SQLite：是；M3主线写入 `output/states.db`，逐字段回读验收仅在M3独立运行时执行
-- M4候选来源：学校预生成候选；正式输出只使用人工核验后的34条规则
+- 是否使用SQLite：是；M3主线写入 `output/states.db` 并执行逐字段回读验收
+- M4候选来源：学校预生成候选；34条人工核验规则固化在 `m4_mapping.py` 中
 - 官方检查点：未使用
 
 ## 安装与运行
@@ -18,11 +18,11 @@
 .\.venv\Scripts\python.exe student_package\src_skeleton\run_all.py
 ```
 
-统一入口不清理 `student_package/output/`。运行M6前应保留M4阶段已经生成的 `output/verified_mapping_table.csv`；M6只读取该正式映射表，不重新生成候选、核验映射或报告。该入口不运行手册6.6离线真实数据验证。
+统一入口本身不清理 `student_package/output/`，但支持从空目录开始运行，不依赖任何既有输出。M6会把学校预生成候选和代码中固化的34条正式规则分别导出为 `llm_mapping_candidate.csv`、`verified_mapping_table.csv` 供审查，运行时直接使用代码规则完成映射，不重新执行候选核验、样例比较或报告生成。该入口不运行手册6.6离线真实数据验证。
 
 ## 程序入口与顺序
 
-统一入口为 `student_package/src_skeleton/run_all.py`，依次调用：M2解析与41字节TeachingLink编解码 -> M3批量解码、航迹、当前态势及SQLite/查询/航迹图选做（跳过逐字段回读验收） -> M4使用既有正式规则生成统一消息 -> M5四类必做规则与选做R5（不重写阶段报告）。
+统一入口为 `student_package/src_skeleton/run_all.py`，依次调用：M2解析与41字节TeachingLink编解码 -> M3批量解码、航迹、当前态势及SQLite逐字段回读/查询/航迹图选做 -> M4导出既有核验成果并使用代码内正式规则生成统一消息 -> M5四类必做规则与选做R5（不重写阶段报告）。
 
 ## 输入文件
 
@@ -65,6 +65,6 @@
 
 ## 最终提交信息
 
-- 仓库链接：待登记
+- 仓库链接：https://github.com/mt23-r/data-link-10245101543-mt23-r
 - 最终commit ID：待登记
 - 最后检查日期：2026-08-27
