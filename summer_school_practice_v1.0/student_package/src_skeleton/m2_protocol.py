@@ -13,6 +13,7 @@ MAGIC = 0x4453
 VERSION = 1
 MESSAGE_TYPE_POSITION = 1
 UINT16_MAX = 0xFFFF
+UINT32_MAX = 0xFFFFFFFF
 LAT_LON_MAX = (1 << 22) - 1
 
 STUDENT_PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -152,6 +153,32 @@ def parse_callsign(raw: Any, errors: list[dict[str, Any]]) -> str | None:
     return value
 
 
+def parse_timestamp(raw: Any, source_field: str, errors: list[dict[str, Any]]) -> int | None:
+    if not isinstance(raw, int) or isinstance(raw, bool):
+        errors.append(
+            make_error(
+                "parse",
+                "timestamp",
+                "TYPE_ERROR",
+                raw,
+                f"{source_field} 必须为整数Unix时间戳。",
+            )
+        )
+        return None
+    if not 1 <= raw <= UINT32_MAX:
+        errors.append(
+            make_error(
+                "parse",
+                "timestamp",
+                "OUT_OF_RANGE",
+                raw,
+                f"{source_field} 必须满足 1 <= value <= {UINT32_MAX}。",
+            )
+        )
+        return None
+    return raw
+
+
 def parse_state_vector(vector: list[Any]) -> dict[str, Any]:
     """将OpenSky状态向量转换为发送方内部结构化记录。"""
     errors: list[dict[str, Any]] = []
@@ -171,12 +198,14 @@ def parse_state_vector(vector: list[Any]) -> dict[str, Any]:
     last_contact = item(4)
     timestamp: int | None = None
     timestamp_source = ""
-    if isinstance(time_position, int) and not isinstance(time_position, bool):
-        timestamp = time_position
-        timestamp_source = "position_time"
-    elif isinstance(last_contact, int) and not isinstance(last_contact, bool):
-        timestamp = last_contact
-        timestamp_source = "last_contact_fallback"
+    if time_position is not None:
+        timestamp = parse_timestamp(time_position, "time_position", errors)
+        if timestamp is not None:
+            timestamp_source = "position_time"
+    elif last_contact is not None:
+        timestamp = parse_timestamp(last_contact, "last_contact", errors)
+        if timestamp is not None:
+            timestamp_source = "last_contact_fallback"
     else:
         errors.append(
             make_error(
@@ -212,6 +241,17 @@ def parse_state_vector(vector: list[Any]) -> dict[str, Any]:
 
     speed = optional_number(item(9), "speed", minimum=0.0, maximum=6553.5, errors=errors)
     heading = optional_number(item(10), "heading", minimum=0.0, maximum=360.0, inclusive_maximum=False, errors=errors)
+    if heading is not None and q(heading / 0.01) >= 36000:
+        errors.append(
+            make_error(
+                "parse",
+                "heading",
+                "OUT_OF_RANGE",
+                heading,
+                "heading量化后必须处于0-35999，当前值无法按0.01度分辨率编码。",
+            )
+        )
+        heading = None
     vertical_rate = optional_number(item(11), "vertical_rate", minimum=-327.68, maximum=327.67, errors=errors)
 
     required_ok = target_id is not None and timestamp is not None and on_ground is not None
@@ -251,6 +291,9 @@ def encode_position_message(record: dict[str, Any], message_seq: int) -> bytes:
         raise ValueError("缺少 target_id、timestamp 或 on_ground，不能生成 TeachingLink 帧。")
     if record.get("target_id") is None or record.get("timestamp") is None or record.get("on_ground") is None:
         raise ValueError("缺少 target_id、timestamp 或 on_ground，不能生成 TeachingLink 帧。")
+    timestamp = int(record["timestamp"])
+    if not 1 <= timestamp <= UINT32_MAX:
+        raise ValueError(f"timestamp 必须满足 1 <= value <= {UINT32_MAX}。")
 
     data = bytearray(FRAME_SIZE)
     data[0:2] = MAGIC.to_bytes(2, "big")
@@ -258,7 +301,7 @@ def encode_position_message(record: dict[str, Any], message_seq: int) -> bytes:
     data[3] = MESSAGE_TYPE_POSITION
     data[4:6] = FRAME_SIZE.to_bytes(2, "big")
     data[6:8] = (message_seq % 65536).to_bytes(2, "big")
-    data[8:12] = int(record["timestamp"]).to_bytes(4, "big", signed=False)
+    data[8:12] = timestamp.to_bytes(4, "big", signed=False)
     data[12:15] = encode_uint24(int(record["target_id"], 16))
 
     status_flags = 0
@@ -297,10 +340,11 @@ def encode_position_message(record: dict[str, Any], message_seq: int) -> bytes:
             data[31:33] = code.to_bytes(2, "big")
             validity_flags |= 1 << VALIDITY_BITS["speed"]
     if record.get("heading") is not None:
-        code = code_in_uint16(q(float(record["heading"]) / 0.01), "heading", record["heading"], record.setdefault("_errors", []))
-        if code is not None and code < 36000:
-            data[33:35] = code.to_bytes(2, "big")
-            validity_flags |= 1 << VALIDITY_BITS["heading"]
+        code = q(float(record["heading"]) / 0.01)
+        if not 0 <= code < 36000:
+            raise ValueError("heading量化后必须处于0-35999。")
+        data[33:35] = code.to_bytes(2, "big")
+        validity_flags |= 1 << VALIDITY_BITS["heading"]
     if record.get("vertical_rate") is not None:
         code = code_in_uint16(
             q((float(record["vertical_rate"]) + 327.68) / 0.01),
@@ -372,6 +416,7 @@ def decode_position_message(data: bytes) -> dict[str, Any]:
     validity_flags = data[38]
     checksum = int.from_bytes(data[39:41], "big")
     expected_checksum = calculate_checksum(data[:39])
+    timestamp = int.from_bytes(data[8:12], "big")
 
     if magic != MAGIC:
         errors.append("MAGIC_ERROR:magic")
@@ -383,6 +428,8 @@ def decode_position_message(data: bytes) -> dict[str, Any]:
         errors.append("LENGTH_ERROR:message_length")
     if checksum != expected_checksum:
         errors.append("CHECKSUM_ERROR:checksum")
+    if timestamp <= 0:
+        errors.append("REQUIRED_FIELD_MISSING:timestamp")
     if latitude_code & 0xC00000:
         errors.append("RESERVED_BITS_ERROR:latitude_code")
     if longitude_code & 0xC00000:
@@ -426,7 +473,7 @@ def decode_position_message(data: bytes) -> dict[str, Any]:
         {
             "target_id": f"{int.from_bytes(data[12:15], 'big'):06x}",
             "callsign": decode_callsign(data[15:23], callsign_valid, errors),
-            "timestamp": int.from_bytes(data[8:12], "big"),
+            "timestamp": timestamp,
             "timestamp_source": "last_contact_fallback" if bit_is_set(status_flags, 2) else "position_time",
             "time_source": "last_contact_fallback" if bit_is_set(status_flags, 2) else "position_time",
             "message_seq": int.from_bytes(data[6:8], "big"),
@@ -497,6 +544,104 @@ def validation_row(record_no: int, target_id: str | None, error: dict[str, Any])
     }
 
 
+def build_invalid_frame_cases(frame: bytes) -> list[tuple[str, bytes]]:
+    """基于一条正常帧构造手册要求的典型接收错误。"""
+    if len(frame) != FRAME_SIZE:
+        raise ValueError("错误帧演练需要一条完整的41字节基准帧。")
+
+    cases: list[tuple[str, bytes]] = [("truncated_frame", frame[:-1])]
+
+    def add_case(name: str, data: bytearray, *, repair_checksum: bool = True) -> None:
+        if repair_checksum:
+            data[39:41] = calculate_checksum(bytes(data[:39])).to_bytes(2, "big")
+        cases.append((name, bytes(data)))
+
+    data = bytearray(frame)
+    data[0:2] = (MAGIC ^ 1).to_bytes(2, "big")
+    add_case("bad_magic", data)
+
+    data = bytearray(frame)
+    data[2] = VERSION + 1
+    add_case("bad_version", data)
+
+    data = bytearray(frame)
+    data[3] = MESSAGE_TYPE_POSITION + 1
+    add_case("bad_message_type", data)
+
+    data = bytearray(frame)
+    data[4:6] = (FRAME_SIZE - 1).to_bytes(2, "big")
+    add_case("bad_message_length", data)
+
+    data = bytearray(frame)
+    data[40] ^= 1
+    add_case("bad_checksum", data, repair_checksum=False)
+
+    data = bytearray(frame)
+    data[23] |= 0b01000000
+    add_case("latitude_reserved_bits", data)
+
+    data = bytearray(frame)
+    data[26] |= 0b01000000
+    add_case("longitude_reserved_bits", data)
+
+    data = bytearray(frame)
+    data[37] |= 0b00001000
+    add_case("status_reserved_bits", data)
+
+    data = bytearray(frame)
+    data[38] |= 0b10000000
+    add_case("validity_reserved_bits", data)
+
+    data = bytearray(frame)
+    data[23:26] = (1).to_bytes(3, "big")
+    data[38] &= ~(1 << VALIDITY_BITS["lat"])
+    add_case("flag_placeholder_mismatch", data)
+
+    data = bytearray(frame)
+    data[8:12] = (0).to_bytes(4, "big")
+    add_case("missing_required_timestamp", data)
+    return cases
+
+
+def exercise_invalid_frames(frame: bytes, record_no: int, target_id: str | None) -> list[dict[str, Any]]:
+    """解码人工错误帧，并把帧级问题转换为validation_log记录。"""
+    rows: list[dict[str, Any]] = []
+    observed_types: set[str] = set()
+    for case_name, invalid_frame in build_invalid_frame_cases(frame):
+        decoded = decode_position_message(invalid_frame)
+        if decoded.get("message_valid"):
+            raise RuntimeError(f"错误帧演练 {case_name} 被接收端错误接受。")
+        for error_text in decoded.get("validation_errors", []):
+            problem_type, _, field = error_text.partition(":")
+            observed_types.add(problem_type)
+            rows.append(
+                {
+                    "record_no": record_no,
+                    "target_id": target_id or decoded.get("target_id", ""),
+                    "stage": "decode_test",
+                    "field": field,
+                    "problem_type": problem_type,
+                    "value": case_name,
+                    "description": f"错误帧演练 {case_name} 被接收端拒绝。",
+                }
+            )
+
+    required_types = {
+        "LENGTH_ERROR",
+        "MAGIC_ERROR",
+        "VERSION_ERROR",
+        "MESSAGE_TYPE_ERROR",
+        "CHECKSUM_ERROR",
+        "RESERVED_BITS_ERROR",
+        "FLAG_VALUE_INCONSISTENCY",
+        "REQUIRED_FIELD_MISSING",
+    }
+    missing_types = required_types - observed_types
+    if missing_types:
+        raise RuntimeError(f"错误帧演练缺少预期错误类型：{','.join(sorted(missing_types))}")
+    return rows
+
+
 def decoded_csv_row(decoded: dict[str, Any]) -> dict[str, Any]:
     row = dict(decoded)
     row["validation_errors"] = ";".join(decoded.get("validation_errors", []))
@@ -565,6 +710,7 @@ def run_m2() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str,
     decoded_rows: list[dict[str, Any]] = []
     all_roundtrip_rows: list[dict[str, Any]] = []
     frames: list[bytes] = []
+    encoded_records: list[dict[str, Any]] = []
 
     records: list[dict[str, Any]] = []
     for record_no, vector in enumerate(read_raw_states(), start=1):
@@ -590,6 +736,7 @@ def run_m2() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str,
             )
             continue
         frames.append(frame)
+        encoded_records.append(record)
         decoded = decode_position_message(frame)
         decoded["source"] = "TeachingLink"
         decoded_rows.append(decoded_csv_row(decoded))
@@ -609,6 +756,15 @@ def run_m2() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str,
                     }
                 )
         message_seq += 1
+
+    if frames:
+        validation_rows.extend(
+            exercise_invalid_frames(
+                frames[0],
+                int(encoded_records[0]["record_no"]),
+                encoded_records[0].get("target_id"),
+            )
+        )
 
     (OUTPUT_ROOT / "encoded_messages.bin").write_bytes(b"".join(frames))
     write_csv(OUTPUT_ROOT / "decoded_partner_states.csv", DECODED_FIELDS, decoded_rows)

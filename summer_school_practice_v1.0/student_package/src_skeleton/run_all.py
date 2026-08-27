@@ -1,64 +1,15 @@
-from __future__ import annotations
-
-from pathlib import Path
-
-
-STUDENT_PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_ROOT = STUDENT_PACKAGE_ROOT / "output"
+import m2_protocol
+import m3_tracks
+import m4_mapping
+import m5_quality
 
 
-def prepare_output_directory() -> None:
-    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-
-
-def parse() -> None:
-    raise NotImplementedError("TODO：接入M2 OpenSky解析实现，并输出结构化解析结果。")
-
-
-def encode() -> None:
-    raise NotImplementedError("TODO：接入M2 TeachingLink编码实现。")
-
-
-def decode_validate() -> None:
-    raise NotImplementedError("TODO：接入M2解码与帧验证实现。")
-
-
-def build_tracks() -> None:
-    raise NotImplementedError("TODO：接入M3航迹与当前态势实现。")
-
-
-def map_unified() -> None:
-    raise NotImplementedError("TODO：接入M4人工核验后的映射实现。")
-
-
-def check_quality() -> None:
-    raise NotImplementedError("TODO：接入M5一致性检查实现。")
-
-
-def export_results() -> None:
-    raise NotImplementedError("TODO：整理M6关键成果和README；不得把助教检查点当成本模块成果。")
-
-
-def run_pipeline() -> None:
-    prepare_output_directory()
-    parse()
-    encode()
-    decode_validate()
-    build_tracks()
-    map_unified()
-    check_quality()
-    export_results()
-
-
-def main() -> int:
-    try:
-        run_pipeline()
-    except NotImplementedError as exc:
-        print(exc)
-        print("当前文件是学生骨架，模块实现完成后再进行端到端运行。")
-        return 2
-    return 0
+def main() -> None:
+    m2_protocol.run_m2()
+    m3_tracks.run_m3(include_sqlite=True, include_plot=True, verify_sqlite=False)  # 生成选做SQLite和航迹图，但不执行M3阶段的SQLite逐字段回读验收。
+    m4_mapping.map_with_verified_rules()  # M6只使用M4已人工核验的正式映射表生成统一消息，不重新生成候选、核验规则或执行样例验证。
+    m5_quality.run_m5(include_frame_validation=True)  # 启用选做的上游TeachingLink帧校验失败告警，并执行M5必做一致性规则。
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
