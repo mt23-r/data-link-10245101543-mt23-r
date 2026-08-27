@@ -1,0 +1,4 @@
+﻿target_id,callsign,timestamp,timestamp_source,message_seq,lat,lon,altitude,speed,heading,vertical_rate,on_ground,message_valid,source
+000001,TEST0001,1710000060,position_time,1,2.1457677235048322e-05,4.2915354470096645e-05,0.0,0.0,0.0,0.0,1,1,TeachingLink
+000001,TEST0001,1710000090,position_time,2,0.010020735268767567,0.009999277591532518,10.0,10.0,45.0,0.0,0,1,TeachingLink
+000001,TEST0001,1710000120,position_time,3,0.020020012860300085,0.020041470537535133,20.0,20.0,90.0,0.0,0,1,TeachingLink

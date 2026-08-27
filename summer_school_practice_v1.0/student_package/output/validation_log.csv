@@ -1,3 +1,15 @@
 ﻿record_no,target_id,stage,field,problem_type,value,description
 4,780bad,parse,timestamp,REQUIRED_FIELD_MISSING,"time_position=None, last_contact=None",time_position 与 last_contact 至少需要一个可用整数时间戳。
 5,780bee,parse,heading,OUT_OF_RANGE,360.0,heading 超出允许范围：0.0 <= value < 360.0。
+1,780abc,decode_test,frame,LENGTH_ERROR,truncated_frame,错误帧演练 truncated_frame 被接收端拒绝。
+1,780abc,decode_test,magic,MAGIC_ERROR,bad_magic,错误帧演练 bad_magic 被接收端拒绝。
+1,780abc,decode_test,version,VERSION_ERROR,bad_version,错误帧演练 bad_version 被接收端拒绝。
+1,780abc,decode_test,message_type,MESSAGE_TYPE_ERROR,bad_message_type,错误帧演练 bad_message_type 被接收端拒绝。
+1,780abc,decode_test,message_length,LENGTH_ERROR,bad_message_length,错误帧演练 bad_message_length 被接收端拒绝。
+1,780abc,decode_test,checksum,CHECKSUM_ERROR,bad_checksum,错误帧演练 bad_checksum 被接收端拒绝。
+1,780abc,decode_test,latitude_code,RESERVED_BITS_ERROR,latitude_reserved_bits,错误帧演练 latitude_reserved_bits 被接收端拒绝。
+1,780abc,decode_test,longitude_code,RESERVED_BITS_ERROR,longitude_reserved_bits,错误帧演练 longitude_reserved_bits 被接收端拒绝。
+1,780abc,decode_test,status_flags,RESERVED_BITS_ERROR,status_reserved_bits,错误帧演练 status_reserved_bits 被接收端拒绝。
+1,780abc,decode_test,validity_flags,RESERVED_BITS_ERROR,validity_reserved_bits,错误帧演练 validity_reserved_bits 被接收端拒绝。
+1,780abc,decode_test,latitude_code,FLAG_VALUE_INCONSISTENCY,flag_placeholder_mismatch,错误帧演练 flag_placeholder_mismatch 被接收端拒绝。
+1,780abc,decode_test,timestamp,REQUIRED_FIELD_MISSING,missing_required_timestamp,错误帧演练 missing_required_timestamp 被接收端拒绝。

@@ -1,0 +1,35 @@
+﻿source_format,input_field,unified_field,mapping_rule,unit_conversion,null_strategy,evidence,verified
+OpenSky,target_id,track_id,校验为6位十六进制后转小写并保留前导0,无,非法时输出空字符串并令message_valid=false,source_field_definitions.md：track_id规则,true
+OpenSky,(source_format),source,写入固定来源名OpenSky,无,不允许为空,unified_model.json与手册7.5,true
+OpenSky,latest_time,timestamp,转换为正整数Unix秒,无,非法时输出0并令time_valid=false,source_field_definitions.md：timestamp规则,true
+OpenSky,callsign,identity.callsign,去除首尾空白后直接映射,无,空字符串或缺失时为null,opensky_field_dictionary.csv：callsign可空,true
+OpenSky,lat,position.lat,数值且满足-90<=lat<=90时映射,degree->degree,缺失或越界时为null,source_field_definitions.md：position.lat规则,true
+OpenSky,lon,position.lon,数值且满足-180<=lon<=180时映射,degree->degree,缺失或越界时为null,source_field_definitions.md：position.lon规则,true
+OpenSky,altitude,position.alt,有限数值直接映射,meter->meter,缺失或非法时为null,opensky_field_dictionary.csv：高度单位meter,true
+OpenSky,altitude+alt_type,position.alt_type,高度有效时保留barometric/geometric，否则unknown,无,高度缺失时强制unknown,source_field_definitions.md：高度来源规则,true
+OpenSky,speed,motion.speed,非负有限数值直接映射,m/s->m/s,缺失或非法时为null,opensky_field_dictionary.csv：velocity单位m/s,true
+OpenSky,heading,motion.heading,满足0<=heading<360时映射,degree->degree,缺失或越界时为null,source_field_definitions.md：航向范围,true
+OpenSky,vertical_rate,motion.vertical_rate,有限数值直接映射,m/s->m/s,缺失或非法时为null,opensky_field_dictionary.csv：vertical_rate单位m/s,true
+OpenSky,on_ground,status.on_ground,解析为布尔值,无,非法时输出false并令message_valid=false,opensky_field_dictionary.csv：on_ground必需布尔,true
+OpenSky,lat+lon,quality.position_valid,经纬度均非空且在合法范围时为true,无,任一缺失或非法时为false,source_field_definitions.md：position_valid规则,true
+OpenSky,latest_time,quality.time_valid,timestamp为正整数时为true,无,无效时间为false,source_field_definitions.md：time_valid规则,true
+OpenSky,message_valid,quality.message_valid,保留上游结构校验结果并检查统一映射必需字段,无,缺失或非true时为false,source_field_definitions.md：源结构校验结果,true
+OpenSky,time_source/timestamp_source,quality.time_source,仅接受position_time或last_contact_fallback,无,非法时使用position_time并令message_valid=false,source_field_definitions.md：时间来源枚举,true
+OpenSky,(M4 default),quality.anomaly_flags,M4初始化为空数组，M5负责追加异常,无,固定为空数组,unified_model.json与M4/M5职责边界,true
+TeachingLink,target_id,track_id,校验为6位十六进制后转小写并保留前导0,无,非法时输出空字符串并令message_valid=false,teaching_message_spec.md：uint24目标标识,true
+TeachingLink,(source_format),source,写入固定来源名TeachingLink,无,不允许为空,unified_model.json与手册7.5,true
+TeachingLink,timestamp/latest_time,timestamp,转换为正整数Unix秒,无,非法时输出0并令time_valid=false,teaching_message_spec.md：timestamp；当前态势表使用latest_time,true
+TeachingLink,callsign+validity_flags.bit6,identity.callsign,bit6=1且1-8字节ASCII时映射,ASCII bytes->string,bit6=0或内容非法时为null,teaching_message_spec.md：callsign与bit6,true
+TeachingLink,latitude_code+validity_flags.bit0,position.lat,bit0=1时code/(2^22-1)*180-90,22-bit code->degree,bit0=0时为null且占位code必须为0,teaching_message_spec.md：纬度定点公式,true
+TeachingLink,longitude_code+validity_flags.bit1,position.lon,bit1=1时code/(2^22-1)*360-180,22-bit code->degree,bit1=0时为null且占位code必须为0,teaching_message_spec.md：经度定点公式,true
+TeachingLink,altitude_code+validity_flags.bit2,position.alt,bit2=1时code-1000,uint16 code->meter；offset=-1000,bit2=0时为null且占位code必须为0,teaching_message_spec.md：高度偏置1000m,true
+TeachingLink,status_flags.bit1+validity_flags.bit2,position.alt_type,高度有效时bit1=0为barometric、1为geometric,无,高度无效时为unknown,teaching_message_spec.md：altitude_is_geometric,true
+TeachingLink,speed_code+validity_flags.bit3,motion.speed,bit3=1时code*0.1,uint16 code*0.1->m/s,bit3=0时为null且占位code必须为0,teaching_message_spec.md：速度分辨率0.1m/s,true
+TeachingLink,heading_code+validity_flags.bit4,motion.heading,bit4=1时code*0.01且结果小于360,uint16 code*0.01->degree,bit4=0时为null且占位code必须为0,teaching_message_spec.md：航向分辨率与范围,true
+TeachingLink,vertical_rate_code+validity_flags.bit5,motion.vertical_rate,bit5=1时code*0.01-327.68,uint16 code*0.01-327.68->m/s,bit5=0时为null且占位code必须为0,teaching_message_spec.md：垂直速度偏置,true
+TeachingLink,status_flags.bit0,status.on_ground,bit0=1为true，否则false,无,标志字节非法时输出false并令message_valid=false,teaching_message_spec.md：on_ground,true
+TeachingLink,latitude/longitude code+bit0/bit1,quality.position_valid,两有效位均为1且编码与解码范围合法时为true,无,任一位置字段无效时为false,source_field_definitions.md：position_valid规则,true
+TeachingLink,timestamp/latest_time,quality.time_valid,timestamp为正整数时为true；时间回退仍有效,无,时间无效时为false,source_field_definitions.md：回退不等于时间无效,true
+TeachingLink,message_valid,quality.message_valid,保留完整帧接收判据并检查导出字段一致性,无,缺失、非true或标志/占位矛盾时为false,teaching_message_spec.md：接收判据；不代表来源真实性,true
+TeachingLink,status_flags.bit2,quality.time_source,bit2=1为last_contact_fallback，否则position_time,无,标志字节非法时使用position_time并令message_valid=false,teaching_message_spec.md：timestamp_fallback,true
+TeachingLink,(M4 default),quality.anomaly_flags,M4初始化为空数组，M5负责追加异常,无,固定为空数组,unified_model.json与M4/M5职责边界,true
